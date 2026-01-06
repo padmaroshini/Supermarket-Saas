@@ -12,7 +12,7 @@ app.secret_key = "change-this-secret-key-in-production"
 
 @app.route('/')
 def home():
-    return redirect(url_for('login'))
+    return "Supermarket SaaS is running successfully!"
 
 # File upload configuration
 UPLOAD_FOLDER = 'uploads'
