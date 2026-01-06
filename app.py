@@ -7,6 +7,8 @@ from functools import wraps
 import pandas as pd
 import os
 
+print("App is starting...")
+
 app = Flask(__name__)
 app.secret_key = "change-this-secret-key-in-production"
 
