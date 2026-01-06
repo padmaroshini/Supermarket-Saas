@@ -10,6 +10,10 @@ import os
 app = Flask(__name__)
 app.secret_key = "change-this-secret-key-in-production"
 
+@app.route('/')
+def home():
+    return redirect(url_for('login'))
+
 # File upload configuration
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
