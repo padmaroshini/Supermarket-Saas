@@ -34,7 +34,113 @@ If library is not loaded, check your internet connection and refresh the page.`)
             setTimeout(function() {
                 if (typeof Html5Qrcode === 'undefined') {
                     console.error('Html5Qrcode library failed to load');
-                    updateScanStatus('Scanner library failed to load. Please check your internet connection and refresh the page.', true);
+                    updateScanStatus('Camera stopped');
+                }).catch((err) => {
+                    console.error('Error stopping scanner:', err);
+                    updateScanStatus('Error stopping camera', true);
+                });
+            }
+        }
+
+        function fetchProductByCode() {
+            const productCode = document.getElementById('productCodeInput').value.trim().toUpperCase();
+            if (!productCode) {
+                showScanError('Please enter a product code');
+                return;
+            }
+
+            fetch('/get_product_by_code', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ product_code: productCode })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    showScanError(data.error);
+                    hideProductDetails();
+                } else {
+                    showProductDetails(data);
+                    hideScanError();
+                }
+            })
+            .catch(err => {
+                showScanError('Error fetching product: ' + err);
+                hideProductDetails();
+            });
+        }
+
+        function showProductDetails(product) {
+            const detailsDiv = document.getElementById('productDetails');
+            const infoDiv = document.getElementById('productInfo');
+            
+            infoDiv.innerHTML = `
+                <p><strong>Name:</strong> ${product.name}</p>
+                <p><strong>Price:</strong> ₹${parseFloat(product.price).toFixed(2)}</p>
+                <p><strong>GST:</strong> ${product.gst}%</p>
+                <p><strong>Available Stock:</strong> ${product.stock}</p>
+            `;
+            
+            detailsDiv.dataset.productId = product.id;
+            detailsDiv.dataset.productName = product.name;
+            detailsDiv.dataset.productPrice = product.price;
+            detailsDiv.dataset.productGst = product.gst;
+            
+            detailsDiv.style.display = 'block';
+        }
+
+        function hideProductDetails() {
+            document.getElementById('productDetails').style.display = 'none';
+        }
+
+        function showScanError(message) {
+            const errorDiv = document.getElementById('scanError');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideScanError() {
+            document.getElementById('scanError').style.display = 'none';
+        }
+
+        function addScannedToCart() {
+            const detailsDiv = document.getElementById('productDetails');
+            const qty = parseInt(document.getElementById('scanQuantityInput').value);
+            
+            if (!detailsDiv.dataset.productId) {
+                alert('No product selected');
+                return;
+            }
+            
+            if (qty < 1) {
+                alert('Quantity must be at least 1');
+                return;
+            }
+
+            const productId = parseInt(detailsDiv.dataset.productId);
+            const name = detailsDiv.dataset.productName;
+            const price = parseFloat(detailsDiv.dataset.productPrice);
+            const gst = parseFloat(detailsDiv.dataset.productGst);
+
+            const existingIndex = cart.findIndex(item => item.id === productId);
+            if (existingIndex >= 0) {
+                cart[existingIndex].qty += qty;
+            } else {
+                cart.push({ id: productId, name, price, gst, qty });
+            }
+
+            updateCart();
+            
+            document.getElementById('productCodeInput').value = '';
+            document.getElementById('scanQuantityInput').value = 1;
+            hideProductDetails();
+            hideScanError();
+            
+            alert('Product added to cart!');
+        }
+    </script>
+</body>
+</html>Scanner library failed to load. Please check your internet connection and refresh the page.', true);
                     document.getElementById('startScanBtn').disabled = true;
                     document.getElementById('startScanBtn').textContent = 'Scanner Unavailable';
                 } else {
@@ -48,19 +154,6 @@ If library is not loaded, check your internet connection and refresh the page.`)
                     console.log('QRCode library loaded successfully');
                 }
             }, 1000);
-        });
-    </script>
-    <script>
-        // Check if libraries loaded
-        window.addEventListener('load', function() {
-            setTimeout(function() {
-                if (typeof Html5Qrcode === 'undefined') {
-                    console.error('Html5Qrcode library failed to load');
-                    document.getElementById('scanStatus').textContent = 'Scanner library failed to load. Please check your internet connection.';
-                    document.getElementById('scanStatus').style.color = '#dc2626';
-                    document.getElementById('startScanBtn').disabled = true;
-                }
-            }, 2000); // Wait 2 seconds for library to load
         });
     </script>
     <style>
@@ -139,6 +232,150 @@ If library is not loaded, check your internet connection and refresh the page.`)
         .empty-cart {
             text-align: center; padding: 40px 20px; color: #6b7280;
         }
+
+        /* Print Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-content {
+            background: white;
+            padding: 48px;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.4);
+            animation: slideUp 0.4s ease;
+        }
+
+        .success-icon {
+            width: 90px;
+            height: 90px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 24px;
+            box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3);
+        }
+
+        .success-icon span {
+            font-size: 52px;
+            color: white;
+        }
+
+        .modal-content h2 {
+            margin: 0 0 12px 0;
+            color: #111827;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .modal-content .bill-number {
+            color: #6b7280;
+            margin: 0 0 8px 0;
+            font-size: 16px;
+        }
+
+        .modal-content .bill-total {
+            color: #10b981;
+            margin: 0 0 36px 0;
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .modal-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .modal-btn {
+            padding: 16px 24px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .modal-btn-primary {
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        }
+
+        .modal-btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
+        }
+
+        .modal-btn-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+
+        .modal-btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+        }
+
+        .modal-btn-secondary {
+            background: #f3f4f6;
+            color: #111827;
+            border: 2px solid #e5e7eb;
+        }
+
+        .modal-btn-secondary:hover {
+            background: #e5e7eb;
+            transform: translateY(-2px);
+        }
+
+        .modal-close {
+            background: transparent;
+            color: #6b7280;
+            border: none;
+            padding: 12px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: underline;
+            margin-top: 12px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .modal-close:hover {
+            color: #374151;
+        }
     </style>
 </head>
 <body>
@@ -161,7 +398,7 @@ If library is not loaded, check your internet connection and refresh the page.`)
     <main class="main-content">
         <div class="billing-container">
             <div class="card">
-                <h3>� Product Scanner (Demo)</h3>
+                <h3>📷 Product Scanner (Demo)</h3>
                 <p style="font-size: 12px; color: #6b7280; margin-bottom: 16px;">
                     💡 For demonstration purposes, we use system-defined product codes scanned via laptop camera.
                     This can be easily extended to real barcode scanners in production.
@@ -378,7 +615,10 @@ If library is not loaded, check your internet connection and refresh the page.`)
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    alert('Bill created!\nBill Number: ' + data.bill_number + '\nTotal: ₹' + data.total);
+                    // Show print options modal instead of alert
+                    showPrintOptionsModal(data.bill_number, data.bill_id, data.total);
+                    
+                    // Clear cart
                     cart = [];
                     updateCart();
                     document.getElementById('discount').value = 0;
@@ -387,7 +627,70 @@ If library is not loaded, check your internet connection and refresh the page.`)
                 } else {
                     alert('Error: ' + data.message);
                 }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('An error occurred during checkout');
             });
+        }
+
+        // Print Options Modal Functions
+        function showPrintOptionsModal(billNumber, billId, total) {
+            const modalHTML = `
+                <div id="printModal" class="modal-overlay">
+                    <div class="modal-content">
+                        <div class="success-icon">
+                            <span>✓</span>
+                        </div>
+                        
+                        <h2>Bill Generated Successfully!</h2>
+                        <p class="bill-number">Bill Number: <strong>${billNumber}</strong></p>
+                        <p class="bill-total">₹${total.toFixed(2)}</p>
+                        
+                        <div class="modal-buttons">
+                            <button class="modal-btn modal-btn-primary" onclick="printBillA4(${billId})">
+                                <span style="font-size: 20px;">🖨️</span>
+                                Print A4 Invoice
+                            </button>
+                            
+                            <button class="modal-btn modal-btn-success" onclick="printBillThermal(${billId})">
+                                <span style="font-size: 20px;">🧾</span>
+                                Print Thermal Receipt
+                            </button>
+                            
+                            <button class="modal-btn modal-btn-secondary" onclick="viewBill(${billId})">
+                                <span style="font-size: 20px;">👁️</span>
+                                View Bill Details
+                            </button>
+                        </div>
+                        
+                        <button class="modal-close" onclick="closeModal()">
+                            Close and Continue Billing
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+        }
+
+        function printBillA4(billId) {
+            window.open('/print_bill_a4/' + billId, '_blank');
+        }
+
+        function printBillThermal(billId) {
+            window.open('/print_bill_thermal/' + billId, '_blank');
+        }
+
+        function viewBill(billId) {
+            window.location.href = '/view_bill/' + billId;
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('printModal');
+            if (modal) {
+                modal.remove();
+            }
         }
 
         // Product Scanning Functions
@@ -397,7 +700,6 @@ If library is not loaded, check your internet connection and refresh the page.`)
         function startScanner() {
             if (isScanning) return;
 
-            // Check if library is loaded
             if (typeof Html5Qrcode === 'undefined') {
                 updateScanStatus('Scanner library not loaded. Please refresh the page and check your internet connection.', true);
                 alert('The QR scanner library failed to load. Please:\n1. Check your internet connection\n2. Refresh the page\n3. Try a different browser');
@@ -406,14 +708,12 @@ If library is not loaded, check your internet connection and refresh the page.`)
 
             updateScanStatus('Initializing camera...');
 
-            // Check if camera is supported
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 updateScanStatus('Camera not supported in this browser', true);
                 alert('Camera is not supported in this browser. Please use a modern browser like Chrome, Firefox, or Edge.');
                 return;
             }
 
-            // Check if we're on HTTPS or localhost
             if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
                 updateScanStatus('Camera requires HTTPS or localhost', true);
                 alert('Camera access requires HTTPS or localhost. For demo purposes, please access this page via https:// or localhost.');
@@ -432,24 +732,16 @@ If library is not loaded, check your internet connection and refresh the page.`)
                 };
 
                 html5QrCode.start(
-                    { facingMode: "environment" }, // Try back camera first
+                    { facingMode: "environment" },
                     config,
                     (decodedText, decodedResult) => {
-                        // Success callback
                         updateScanStatus('QR Code detected!');
                         console.log('QR Code detected:', decodedText);
-
-                        // Stop scanning
                         stopScanner();
-
-                        // Populate the input field with scanned code
                         document.getElementById('productCodeInput').value = decodedText.toUpperCase();
-
-                        // Auto-fetch the product
                         setTimeout(() => fetchProductByCode(), 500);
                     },
                     (errorMessage) => {
-                        // Error callback - ignore most errors as they're normal during scanning
                         console.log('Scan error:', errorMessage);
                     }
                 ).then(() => {
@@ -461,11 +753,10 @@ If library is not loaded, check your internet connection and refresh the page.`)
                     console.error('Failed to start scanner:', err);
                     updateScanStatus('Failed to access camera: ' + err.message, true);
 
-                    // Try with front camera as fallback
                     if (err.message.includes('environment')) {
                         updateScanStatus('Trying front camera...');
                         html5QrCode.start(
-                            { facingMode: "user" }, // Try front camera
+                            { facingMode: "user" },
                             config,
                             (decodedText, decodedResult) => {
                                 updateScanStatus('QR Code detected!');
@@ -499,117 +790,4 @@ If library is not loaded, check your internet connection and refresh the page.`)
                     isScanning = false;
                     document.getElementById('startScanBtn').style.display = 'inline-block';
                     document.getElementById('stopScanBtn').style.display = 'none';
-                    updateScanStatus('Camera stopped');
-                }).catch((err) => {
-                    console.error('Error stopping scanner:', err);
-                    updateScanStatus('Error stopping camera', true);
-                });
-            }
-        }
-
-        function generateQR() {
-            alert('QR code generation is currently disabled.\n\nFor your demo, you can:\n1. Use online QR generators like qr-code-generator.com\n2. Or manually type the product codes\n\nSample codes: RICE100, MILK500, SUGAR100, OIL100, BREAD001, EGGS012');
-        }
-
-        function fetchProductByCode() {
-            const productCode = document.getElementById('productCodeInput').value.trim().toUpperCase();
-            if (!productCode) {
-                showScanError('Please enter a product code');
-                return;
-            }
-
-            fetch('/get_product_by_code', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ product_code: productCode })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.error) {
-                    showScanError(data.error);
-                    hideProductDetails();
-                } else {
-                    showProductDetails(data);
-                    hideScanError();
-                }
-            })
-            .catch(err => {
-                showScanError('Error fetching product: ' + err);
-                hideProductDetails();
-            });
-        }
-
-        function showProductDetails(product) {
-            const detailsDiv = document.getElementById('productDetails');
-            const infoDiv = document.getElementById('productInfo');
-            
-            infoDiv.innerHTML = `
-                <p><strong>Name:</strong> ${product.name}</p>
-                <p><strong>Price:</strong> ₹${parseFloat(product.price).toFixed(2)}</p>
-                <p><strong>GST:</strong> ${product.gst}%</p>
-                <p><strong>Available Stock:</strong> ${product.stock}</p>
-            `;
-            
-            // Store product data for adding to cart
-            detailsDiv.dataset.productId = product.id;
-            detailsDiv.dataset.productName = product.name;
-            detailsDiv.dataset.productPrice = product.price;
-            detailsDiv.dataset.productGst = product.gst;
-            
-            detailsDiv.style.display = 'block';
-        }
-
-        function hideProductDetails() {
-            document.getElementById('productDetails').style.display = 'none';
-        }
-
-        function showScanError(message) {
-            const errorDiv = document.getElementById('scanError');
-            errorDiv.textContent = message;
-            errorDiv.style.display = 'block';
-        }
-
-        function hideScanError() {
-            document.getElementById('scanError').style.display = 'none';
-        }
-
-        function addScannedToCart() {
-            const detailsDiv = document.getElementById('productDetails');
-            const qty = parseInt(document.getElementById('scanQuantityInput').value);
-            
-            if (!detailsDiv.dataset.productId) {
-                alert('No product selected');
-                return;
-            }
-            
-            if (qty < 1) {
-                alert('Quantity must be at least 1');
-                return;
-            }
-
-            const productId = parseInt(detailsDiv.dataset.productId);
-            const name = detailsDiv.dataset.productName;
-            const price = parseFloat(detailsDiv.dataset.productPrice);
-            const gst = parseFloat(detailsDiv.dataset.productGst);
-
-            // Check if product already in cart
-            const existingIndex = cart.findIndex(item => item.id === productId);
-            if (existingIndex >= 0) {
-                cart[existingIndex].qty += qty;
-            } else {
-                cart.push({ id: productId, name, price, gst, qty });
-            }
-
-            updateCart();
-            
-            // Clear the scanned product
-            document.getElementById('productCodeInput').value = '';
-            document.getElementById('scanQuantityInput').value = 1;
-            hideProductDetails();
-            hideScanError();
-            
-            alert('Product added to cart!');
-        }
-    </script>
-</body>
-</html>
+                    updateScanStatus('
