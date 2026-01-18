@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice - {{ bill.bill_number }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        @media print {
+            body {
+                margin: 0;
+                padding: 20px;
+            }
+            .no-print {
+                display: none;
+            }
+            @page {
+                size: A4;
+                margin: 20mm;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            max-width: 210mm;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+            color: #111827;
+        }
+
+        .print-button {
+            margin: 20px 0;
+            text-align: center;
+            gap: 10px;
+        }
+
+        .print-button button {
+            background: #6366f1;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 8px;
+            font-weight: 500;
+            margin: 0 5px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .print-button button:hover {
+            background: #4f46e5;
+        }
+
+        .print-button button.close-btn {
+            background: #6b7280;
+        }
+
+        .print-button button.close-btn:hover {
+            background: #4b5563;
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #111827;
+            padding-bottom: 24px;
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            margin: 0 0 8px 0;
+            color: #111827;
+            font-size: 36px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .header p {
+            margin: 4px 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .invoice-type {
+            background: #6366f1;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 6px;
+            display: inline-block;
+            font-weight: 600;
+            font-size: 14px;
+            margin-top: 12px;
+            letter-spacing: 1px;
+        }
+
+        .bill-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            margin-bottom: 32px;
+        }
+
+        .bill-info-box {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .bill-info-box h3 {
+            margin: 0 0 12px 0;
+            color: #111827;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .bill-info-box p {
+            margin: 6px 0;
+            color: #374151;
+            font-size: 14px;
+        }
+
+        .bill-info-box p strong {
+            color: #111827;
+            font-weight: 600;
+            min-width: 120px;
+            display: inline-block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 32px;
+        }
+
+        thead {
+            background: #111827;
+            color: white;
+        }
+
+        th {
+            padding: 14px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 14px 12px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #374151;
+            font-size: 14px;
+        }
+
+        tbody tr:hover {
+            background: #f9fafb;
+        }
+
+        .text-right {
+            text-align: right;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .totals-section {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 32px;
+        }
+
+        .totals {
+            width: 350px;
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .totals table {
+            margin-bottom: 0;
+        }
+
+        .totals td {
+            padding: 10px 0;
+            border-bottom: none;
+            font-size: 14px;
+        }
+
+        .totals .subtotal-row td {
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 12px;
+        }
+
+        .grand-total {
+            background: #111827;
+            color: white;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .grand-total td {
+            padding: 14px 12px !important;
+            border-radius: 6px;
+        }
+
+        .footer {
+            margin-top: 48px;
+            padding-top: 24px;
+            border-top: 2px solid #e5e7eb;
+            text-align: center;
+        }
+
+        .footer p {
+            margin: 6px 0;
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        .footer .thank-you {
+            font-size: 16px;
+            font-weight: 600;
+            color: #111827;
+            margin-bottom: 12px;
+        }
+
+        .footer .note {
+            margin-top: 20px;
+            font-size: 11px;
+            color: #9ca3af;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="print-button no-print">
+        <button onclick="window.print()">🖨️ Print Invoice</button>
+        <button onclick="window.close()" class="close-btn">✖ Close</button>
+    </div>
+
+    <div class="header">
+        <h1>SUPERMARKET SAAS</h1>
+        <p>123 Market Street, City, State - 123456</p>
+        <p>Phone: +91 1234567890 | Email: info@supermarket.com</p>
+        <p>GSTIN: 29XXXXX1234X1ZX</p>
+        <div class="invoice-type">TAX INVOICE</div>
+    </div>
+
+    <div class="bill-info">
+        <div class="bill-info-box">
+            <h3>Invoice Details</h3>
+            <p><strong>Invoice No:</strong> {{ bill["bill_number"] }}</p>
+            <p><strong>Date & Time:</strong> {{ bill["bill_date"] }}</p>
+            <p><strong>Payment Mode:</strong> {{ bill["payment_mode"] }}</p>
+        </div>
+        <div class="bill-info-box">
+            <h3>Sold To</h3>
+            <p><strong>Customer:</strong> Walk-in Customer</p>
+            <p><strong>Address:</strong> N/A</p>
+            <p><strong>Phone:</strong> N/A</p>
+        </div>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Sr.</th>
+                <th>Product Description</th>
+                <th class="text-center">Qty</th>
+                <th class="text-right">Price</th>
+                <th class="text-center">GST %</th>
+                <th class="text-right">GST Amt</th>
+                <th class="text-right">Total Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td><strong>{{ item["product_name"] }}</strong></td>
+                <td class="text-center">{{ item["quantity"] }}</td>
+                <td class="text-right">₹{{ "%.2f"|format(item["price"]) }}</td>
+                <td class="text-center">{{ item["gst"] }}%</td>
+                <td class="text-right">₹{{ "%.2f"|format(item["price"] * item["quantity"] * item["gst"] / 100) }}</td>
+                <td class="text-right"><strong>₹{{ "%.2f"|format(item["item_total"]) }}</strong></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="totals-section">
+        <div class="totals">
+            <table>
+                <tr class="subtotal-row">
+                    <td>Subtotal:</td>
+                    <td class="text-right"><strong>₹{{ "%.2f"|format(subtotal) }}</strong></td>
+                </tr>
+                <tr class="subtotal-row">
+                    <td>Total GST:</td>
+                    <td class="text-right"><strong>₹{{ "%.2f"|format(total_gst) }}</strong></td>
+                </tr>
+                {% if bill["discount"] > 0 %}
+                <tr class="subtotal-row">
+                    <td>Discount:</td>
+                    <td class="text-right" style="color: #dc2626;"><strong>- ₹{{ "%.2f"|format(bill["discount"]) }}</strong></td>
+                </tr>
+                {% endif %}
+                <tr class="grand-total">
+                    <td>Grand Total:</td>
+                    <td class="text-right">₹{{ "%.2f"|format(bill["total"]) }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p class="thank-you">Thank You for Shopping With Us!</p>
+        <p><strong>Terms & Conditions:</strong> Goods once sold cannot be returned or exchanged</p>
+        <p>For any queries, please contact us at info@supermarket.com or +91 1234567890</p>
+        <p class="note">This is a computer-generated invoice and does not require a physical signature.</p>
+    </div>
+</body>
+</html>
