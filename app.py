@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash, send_file
-import sqlite3
+import mysql.connector
+from mysql.connector import Error
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -32,9 +33,17 @@ def allowed_file(filename):
 # DB CONNECTION
 # -----------------------
 def get_db_connection():
-    conn = sqlite3.connect("supermarket_saas.db")
-    conn.row_factory = sqlite3.Row  # Enable column access by name
-    return conn
+    try:
+        conn = mysql.connector.connect(
+            host='localhost',
+            user='root',  # Change this to your MySQL username
+            password='',  # Change this to your MySQL password
+            database='supermarket_saas'
+        )
+        return conn
+    except Error as e:
+        print(f"Error connecting to MySQL: {e}")
+        return None
 
 # -----------------------
 # LOGIN REQUIRED DECORATORS
@@ -62,131 +71,109 @@ def admin_required(f):
 # -----------------------
 def init_database():
     conn = get_db_connection()
+    if not conn:
+        print("Failed to connect to database")
+        return
+    
     cur = conn.cursor()
+
+    # Create database if not exists
+    try:
+        cur.execute("CREATE DATABASE IF NOT EXISTS supermarket_saas")
+        cur.execute("USE supermarket_saas")
+    except Error as e:
+        print(f"Error creating database: {e}")
 
     # Users table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE,
-            password TEXT,
-            role TEXT,
-            store_id INTEGER,
-            full_name TEXT,
-            email TEXT,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(255) UNIQUE,
+            password VARCHAR(255),
+            role VARCHAR(50),
+            store_id INT,
+            full_name VARCHAR(255),
+            email VARCHAR(255),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (store_id) REFERENCES stores (id)
         )
     """)
-    
-    # Add store_id column to users table if it doesn't exist (for existing databases)
-    try:
-        cur.execute("ALTER TABLE users ADD COLUMN store_id INTEGER REFERENCES stores (id)")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-    
-    # Add full_name and email columns if they don't exist
-    try:
-        cur.execute("ALTER TABLE users ADD COLUMN full_name TEXT")
-    except sqlite3.OperationalError:
-        pass
-    
-    try:
-        cur.execute("ALTER TABLE users ADD COLUMN email TEXT")
-    except sqlite3.OperationalError:
-        pass
-    
-    try:
-        cur.execute("ALTER TABLE users ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
-    except sqlite3.OperationalError:
-        pass
 
     # Products table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS products (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE,
-            price REAL,
-            gst REAL,
-            stock INTEGER,
-            product_code TEXT UNIQUE
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(255) UNIQUE,
+            price DECIMAL(10, 2),
+            gst DECIMAL(5, 2),
+            stock INT,
+            product_code VARCHAR(100) UNIQUE,
+            cost_price DECIMAL(10, 2) DEFAULT 0
         )
     """)
 
-    # Add cost_price column to products table if it doesn't exist (for existing databases)
-    try:
-        cur.execute("ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
+    # Stores table (must be created before users due to foreign key)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS stores (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            store_name VARCHAR(255),
+            location VARCHAR(255),
+            phone VARCHAR(50),
+            active TINYINT DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
 
     # Bills table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS bills_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            bill_number TEXT UNIQUE,
-            total REAL,
-            discount REAL,
-            payment_mode TEXT,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            bill_number VARCHAR(100) UNIQUE,
+            total DECIMAL(10, 2),
+            discount DECIMAL(10, 2),
+            payment_mode VARCHAR(50),
             bill_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            created_by INTEGER
+            created_by INT
         )
     """)
 
     # Bill items table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS bill_items (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            bill_id INTEGER,
-            product_name TEXT,
-            quantity INTEGER,
-            price REAL,
-            gst REAL,
-            item_total REAL
-        )
-    """)
-
-    # Stores table
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS stores (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            store_name TEXT,
-            location TEXT,
-            phone TEXT,
-            active INTEGER DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            bill_id INT,
+            product_name VARCHAR(255),
+            quantity INT,
+            price DECIMAL(10, 2),
+            gst DECIMAL(5, 2),
+            item_total DECIMAL(10, 2)
         )
     """)
 
     # Purchases table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS purchases (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product_id INTEGER,
-            quantity INTEGER,
-            cost_price REAL,
-            supplier TEXT,
-            created_by INTEGER,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            product_id INT,
+            quantity INT,
+            cost_price DECIMAL(10, 2),
+            supplier VARCHAR(255),
+            created_by INT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (product_id) REFERENCES products(id),
             FOREIGN KEY (created_by) REFERENCES users(id)
         )
     """)
 
-    # Add cost_price column to purchases table if it doesn't exist (for existing databases)
-    try:
-        cur.execute("ALTER TABLE purchases ADD COLUMN cost_price REAL")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
-
     # Stock movements table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS stock_movements (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product_id INTEGER,
-            change_qty INTEGER,
-            movement_type TEXT,
-            reference_id INTEGER,
-            created_by INTEGER,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            product_id INT,
+            change_qty INT,
+            movement_type VARCHAR(50),
+            reference_id INT,
+            created_by INT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (product_id) REFERENCES products(id),
             FOREIGN KEY (created_by) REFERENCES users(id)
@@ -196,9 +183,9 @@ def init_database():
     # Activity logs table
     cur.execute("""
         CREATE TABLE IF NOT EXISTS activity_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            action TEXT,
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT,
+            action VARCHAR(255),
             details TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id)
@@ -209,14 +196,15 @@ def init_database():
     cur.execute("SELECT * FROM users WHERE username='admin'")
     if not cur.fetchone():
         cur.execute(
-            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
+            "INSERT INTO users (username, password, role) VALUES (%s, %s, %s)",
             ("admin", generate_password_hash("admin123"), "admin")
         )
         print("✓ Default admin created (username: admin, password: admin123)")
 
     # Sample products for demo
     cur.execute("SELECT COUNT(*) FROM products")
-    if cur.fetchone()[0] == 0:
+    result = cur.fetchone()
+    if result[0] == 0:
         sample_products = [
             ("Rice 1kg", 60.0, 5.0, 100, "RICE100"),
             ("Milk 500ml", 25.0, 5.0, 50, "MILK500"),
@@ -227,7 +215,7 @@ def init_database():
         ]
         for product in sample_products:
             cur.execute(
-                "INSERT INTO products (name, price, gst, stock, product_code) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO products (name, price, gst, stock, product_code) VALUES (%s, %s, %s, %s, %s)",
                 product
             )
         print("✓ Sample products created for demo")
@@ -242,9 +230,11 @@ def init_database():
 def log_activity(user_id, action, details=""):
     try:
         conn = get_db_connection()
+        if not conn:
+            return
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO activity_logs (user_id, action, details) VALUES (?, ?, ?)",
+            "INSERT INTO activity_logs (user_id, action, details) VALUES (%s, %s, %s)",
             (user_id, action, details)
         )
         conn.commit()
@@ -266,8 +256,12 @@ def login():
             return render_template("login.html")
 
         conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM users WHERE username=?", (username,))
+        if not conn:
+            flash("Database connection error", "danger")
+            return render_template("login.html")
+        
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM users WHERE username=%s", (username,))
         user = cur.fetchone()
         conn.close()
 
@@ -304,6 +298,10 @@ def logout():
 @admin_required
 def admin_dashboard():
     conn = get_db_connection()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("login"))
+    
     cur = conn.cursor()
     
     cur.execute("SELECT COUNT(*) FROM products")
@@ -332,15 +330,19 @@ def admin_dashboard():
 @login_required
 def user_dashboard():
     conn = get_db_connection()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("login"))
+    
     cur = conn.cursor()
 
     cur.execute("SELECT COUNT(*) FROM products")
     total_products = cur.fetchone()[0] or 0
 
-    cur.execute("SELECT COUNT(*) FROM bills_new WHERE created_by = ?", (session["user_id"],))
+    cur.execute("SELECT COUNT(*) FROM bills_new WHERE created_by = %s", (session["user_id"],))
     user_bills = cur.fetchone()[0] or 0
 
-    cur.execute("SELECT COALESCE(SUM(total), 0) FROM bills_new WHERE created_by = ?", (session["user_id"],))
+    cur.execute("SELECT COALESCE(SUM(total), 0) FROM bills_new WHERE created_by = %s", (session["user_id"],))
     user_sales = cur.fetchone()[0] or 0
 
     cur.execute("SELECT COUNT(*) FROM products WHERE stock < 10")
@@ -371,7 +373,11 @@ def dashboard():
 @login_required
 def inventory():
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("dashboard"))
+    
+    cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM products ORDER BY name")
     products = cur.fetchall()
     conn.close()
@@ -400,21 +406,28 @@ def add_product():
             return render_template("add_product.html")
 
         conn = get_db_connection()
+        if not conn:
+            flash("Database connection error", "danger")
+            return render_template("add_product.html")
+        
         cur = conn.cursor()
         try:
-            cur.execute("INSERT INTO products (name, price, gst, stock, product_code) VALUES (?, ?, ?, ?, ?)",
+            cur.execute("INSERT INTO products (name, price, gst, stock, product_code) VALUES (%s, %s, %s, %s, %s)",
                         (name, price, gst, stock, product_code))
             conn.commit()
             log_activity(session["user_id"], "Add Product", f"Added product '{name}' with code '{product_code}'")
             flash(f"Product '{name}' added successfully!", "success")
             return redirect(url_for("inventory"))
-        except sqlite3.IntegrityError as e:
-            if "name" in str(e):
-                flash("A product with this name already exists", "danger")
-            elif "product_code" in str(e):
-                flash("A product with this code already exists", "danger")
+        except Error as e:
+            if "Duplicate entry" in str(e):
+                if "name" in str(e):
+                    flash("A product with this name already exists", "danger")
+                elif "product_code" in str(e):
+                    flash("A product with this code already exists", "danger")
+                else:
+                    flash("Duplicate entry error", "danger")
             else:
-                flash("Database error occurred", "danger")
+                flash(f"Database error occurred: {str(e)}", "danger")
         finally:
             conn.close()
             
@@ -458,6 +471,11 @@ def bulk_import():
                 
                 # Process each row
                 conn = get_db_connection()
+                if not conn:
+                    flash("Database connection error", "danger")
+                    os.remove(filepath)
+                    return redirect(request.url)
+                
                 cur = conn.cursor()
                 imported_count = 0
                 errors = []
@@ -484,20 +502,23 @@ def bulk_import():
                         
                         # Insert with or without product_code
                         if product_code:
-                            cur.execute("INSERT INTO products (name, price, gst, stock, product_code) VALUES (?, ?, ?, ?, ?)",
+                            cur.execute("INSERT INTO products (name, price, gst, stock, product_code) VALUES (%s, %s, %s, %s, %s)",
                                         (name, price, gst, stock, product_code))
                         else:
-                            cur.execute("INSERT INTO products (name, price, gst, stock) VALUES (?, ?, ?, ?)",
+                            cur.execute("INSERT INTO products (name, price, gst, stock) VALUES (%s, %s, %s, %s)",
                                         (name, price, gst, stock))
                         imported_count += 1
                         
                     except (ValueError, TypeError) as e:
                         errors.append(f"Row {index+2}: Invalid data - {str(e)}")
-                    except sqlite3.IntegrityError as e:
-                        if "name" in str(e):
-                            errors.append(f"Row {index+2}: Product '{name}' already exists")
-                        elif "product_code" in str(e):
-                            errors.append(f"Row {index+2}: Product code '{product_code}' already exists")
+                    except Error as e:
+                        if "Duplicate entry" in str(e):
+                            if "name" in str(e):
+                                errors.append(f"Row {index+2}: Product '{name}' already exists")
+                            elif "product_code" in str(e):
+                                errors.append(f"Row {index+2}: Product code '{product_code}' already exists")
+                            else:
+                                errors.append(f"Row {index+2}: Duplicate entry error")
                         else:
                             errors.append(f"Row {index+2}: Database error - {str(e)}")
                 
@@ -585,13 +606,17 @@ def add_purchase():
             return redirect(url_for("add_purchase"))
 
         conn = get_db_connection()
+        if not conn:
+            flash("Database connection error", "danger")
+            return redirect(url_for("add_purchase"))
+        
         cur = conn.cursor()
 
         # Check for duplicate purchase within last 30 seconds
         cur.execute("""
             SELECT id FROM purchases 
-            WHERE product_id = ? AND quantity = ? AND cost_price = ? AND supplier = ? AND created_by = ?
-            AND created_at > datetime('now', '-30 seconds')
+            WHERE product_id = %s AND quantity = %s AND cost_price = %s AND supplier = %s AND created_by = %s
+            AND created_at > DATE_SUB(NOW(), INTERVAL 30 SECOND)
         """, (product_id, quantity, cost_price, supplier, session["user_id"]))
         
         if cur.fetchone():
@@ -603,7 +628,7 @@ def add_purchase():
             # Insert purchase record
             cur.execute("""
                 INSERT INTO purchases (product_id, quantity, cost_price, supplier, created_by)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
             """, (product_id, quantity, cost_price, supplier, session["user_id"]))
 
             purchase_id = cur.lastrowid
@@ -611,14 +636,14 @@ def add_purchase():
             # Update product stock and cost_price
             cur.execute("""
                 UPDATE products 
-                SET stock = stock + ?, cost_price = ? 
-                WHERE id = ?
+                SET stock = stock + %s, cost_price = %s 
+                WHERE id = %s
             """, (quantity, cost_price, product_id))
 
             # Insert stock movement
             cur.execute("""
                 INSERT INTO stock_movements (product_id, change_qty, movement_type, reference_id, created_by)
-                VALUES (?, ?, 'PURCHASE', ?, ?)
+                VALUES (%s, %s, 'PURCHASE', %s, %s)
             """, (product_id, quantity, purchase_id, session["user_id"]))
 
             conn.commit()
@@ -634,7 +659,11 @@ def add_purchase():
 
     # Get products for dropdown
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("dashboard"))
+    
+    cur = conn.cursor(dictionary=True)
     cur.execute("SELECT id, name FROM products ORDER BY name")
     products = cur.fetchall()
     conn.close()
@@ -673,11 +702,15 @@ def stock_adjustment():
             return redirect(url_for("stock_adjustment"))
 
         conn = get_db_connection()
-        cur = conn.cursor()
+        if not conn:
+            flash("Database connection error", "danger")
+            return redirect(url_for("stock_adjustment"))
+        
+        cur = conn.cursor(dictionary=True)
 
         try:
             # Check current stock
-            cur.execute("SELECT stock FROM products WHERE id = ?", (product_id,))
+            cur.execute("SELECT stock FROM products WHERE id = %s", (product_id,))
             product = cur.fetchone()
 
             if not product or product['stock'] < quantity:
@@ -688,14 +721,14 @@ def stock_adjustment():
             # Reduce product stock
             cur.execute("""
                 UPDATE products 
-                SET stock = stock - ? 
-                WHERE id = ?
+                SET stock = stock - %s 
+                WHERE id = %s
             """, (quantity, product_id))
 
             # Insert stock movement (negative quantity)
             cur.execute("""
                 INSERT INTO stock_movements (product_id, change_qty, movement_type, created_by)
-                VALUES (?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s)
             """, (product_id, -quantity, adjustment_type, session["user_id"]))
 
             conn.commit()
@@ -711,7 +744,11 @@ def stock_adjustment():
 
     # Get products for dropdown
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("dashboard"))
+    
+    cur = conn.cursor(dictionary=True)
     cur.execute("SELECT id, name, stock FROM products WHERE stock > 0 ORDER BY name")
     products = cur.fetchall()
     conn.close()
@@ -726,10 +763,14 @@ def stock_adjustment():
 @admin_required
 def stock_history(product_id):
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("inventory"))
+    
+    cur = conn.cursor(dictionary=True)
 
     # Get product details
-    cur.execute("SELECT * FROM products WHERE id = ?", (product_id,))
+    cur.execute("SELECT * FROM products WHERE id = %s", (product_id,))
     product = cur.fetchone()
 
     if not product:
@@ -749,7 +790,7 @@ def stock_history(product_id):
                END as movement_description
         FROM stock_movements sm
         JOIN users u ON sm.created_by = u.id
-        WHERE sm.product_id = ?
+        WHERE sm.product_id = %s
         ORDER BY sm.created_at DESC
     """, (product_id,))
     
@@ -763,8 +804,12 @@ def stock_history(product_id):
 @admin_required
 def edit_product(id):
     conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM products WHERE id=?", (id,))
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("inventory"))
+    
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM products WHERE id=%s", (id,))
     product = cur.fetchone()
 
     if not product:
@@ -783,15 +828,18 @@ def edit_product(id):
             gst = float(gst)
             stock = int(stock)
             
-            cur.execute("UPDATE products SET name=?, price=?, gst=?, stock=? WHERE id=?",
+            cur.execute("UPDATE products SET name=%s, price=%s, gst=%s, stock=%s WHERE id=%s",
                         (name, price, gst, stock, id))
             conn.commit()
             flash(f"Product '{name}' updated successfully!", "success")
             return redirect(url_for("inventory"))
         except ValueError:
             flash("Invalid price, GST, or stock value", "danger")
-        except sqlite3.IntegrityError:
-            flash("A product with this name already exists", "danger")
+        except Error as e:
+            if "Duplicate entry" in str(e):
+                flash("A product with this name already exists", "danger")
+            else:
+                flash(f"Database error: {str(e)}", "danger")
         finally:
             conn.close()
 
@@ -803,8 +851,12 @@ def edit_product(id):
 @admin_required
 def delete_product(id):
     conn = get_db_connection()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("inventory"))
+    
     cur = conn.cursor()
-    cur.execute("DELETE FROM products WHERE id=?", (id,))
+    cur.execute("DELETE FROM products WHERE id=%s", (id,))
     conn.commit()
     conn.close()
     flash("Product deleted successfully", "success")
@@ -819,8 +871,12 @@ def low_stock():
     threshold = request.args.get('threshold', 10, type=int)
     
     conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT id, name, stock, price FROM products WHERE stock < ? ORDER BY stock ASC", (threshold,))
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("dashboard"))
+    
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT id, name, stock, price FROM products WHERE stock < %s ORDER BY stock ASC", (threshold,))
     low_stock_products = cur.fetchall()
     conn.close()
     
@@ -831,7 +887,11 @@ def low_stock():
 @admin_required
 def add_stock(product_id):
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("low_stock"))
+    
+    cur = conn.cursor(dictionary=True)
     
     if request.method == "POST":
         try:
@@ -840,7 +900,7 @@ def add_stock(product_id):
             if quantity <= 0:
                 flash("Quantity must be positive", "danger")
             else:
-                cur.execute("UPDATE products SET stock = stock + ? WHERE id = ?", (quantity, product_id))
+                cur.execute("UPDATE products SET stock = stock + %s WHERE id = %s", (quantity, product_id))
                 conn.commit()
                 flash(f"Added {quantity} units to stock successfully!", "success")
                 return redirect(url_for("low_stock"))
@@ -849,7 +909,7 @@ def add_stock(product_id):
         finally:
             conn.close()
     
-    cur.execute("SELECT id, name, stock, price FROM products WHERE id = ?", (product_id,))
+    cur.execute("SELECT id, name, stock, price FROM products WHERE id = %s", (product_id,))
     product = cur.fetchone()
     conn.close()
     
@@ -866,7 +926,11 @@ def add_stock(product_id):
 @login_required
 def stores():
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("dashboard"))
+    
+    cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM stores ORDER BY created_at DESC")
     stores = cur.fetchall()
     conn.close()
@@ -886,8 +950,12 @@ def add_store():
             return render_template("add_store.html")
         
         conn = get_db_connection()
+        if not conn:
+            flash("Database connection error", "danger")
+            return render_template("add_store.html")
+        
         cur = conn.cursor()
-        cur.execute("INSERT INTO stores (store_name, location, phone) VALUES (?, ?, ?)",
+        cur.execute("INSERT INTO stores (store_name, location, phone) VALUES (%s, %s, %s)",
                     (store_name, location, phone))
         conn.commit()
         conn.close()
@@ -904,7 +972,11 @@ def add_store():
 @admin_required
 def users():
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("dashboard"))
+    
+    cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM users ORDER BY id DESC")
     users = cur.fetchall()
     conn.close()
@@ -916,7 +988,11 @@ def users():
 def add_user():
     # Fetch stores for the dropdown
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("users"))
+    
+    cur = conn.cursor(dictionary=True)
     cur.execute("SELECT id, store_name FROM stores WHERE active = 1 ORDER BY store_name")
     stores = cur.fetchall()
     conn.close()
@@ -945,19 +1021,26 @@ def add_user():
             store_id = int(store_id)
         
         conn = get_db_connection()
+        if not conn:
+            flash("Database connection error", "danger")
+            return render_template("add_user.html", stores=stores)
+        
         cur = conn.cursor()
         try:
             hashed_password = generate_password_hash(password)
             cur.execute("""
                 INSERT INTO users (username, password, role, store_id, full_name, email) 
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s)
             """, (username, hashed_password, role, store_id, full_name, email))
             conn.commit()
             log_activity(session["user_id"], "Add User", f"Added user '{username}' with role '{role}'")
             flash(f"User '{username}' added successfully!", "success")
             return redirect(url_for("users"))
-        except sqlite3.IntegrityError:
-            flash("Username already exists", "danger")
+        except Error as e:
+            if "Duplicate entry" in str(e):
+                flash("Username already exists", "danger")
+            else:
+                flash(f"Database error: {str(e)}", "danger")
         finally:
             conn.close()
             
@@ -971,7 +1054,11 @@ def add_user():
 @admin_required
 def activity_log():
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("dashboard"))
+    
+    cur = conn.cursor(dictionary=True)
     cur.execute("""
         SELECT al.*, u.username, s.store_name 
         FROM activity_logs al 
@@ -991,7 +1078,11 @@ def activity_log():
 @login_required
 def billing():
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("dashboard"))
+    
+    cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM products WHERE stock > 0 ORDER BY name")
     products = cur.fetchall()
     conn.close()
@@ -1007,8 +1098,11 @@ def get_product_by_code():
         return jsonify({"error": "Product code is required"}), 400
     
     conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT id, name, price, gst, stock FROM products WHERE product_code = ? AND stock > 0", (product_code,))
+    if not conn:
+        return jsonify({"error": "Database connection error"}), 500
+    
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT id, name, price, gst, stock FROM products WHERE product_code = %s AND stock > 0", (product_code,))
     product = cur.fetchone()
     conn.close()
     
@@ -1016,8 +1110,8 @@ def get_product_by_code():
         return jsonify({
             "id": product["id"],
             "name": product["name"],
-            "price": product["price"],
-            "gst": product["gst"],
+            "price": float(product["price"]),
+            "gst": float(product["gst"]),
             "stock": product["stock"]
         })
     else:
@@ -1035,7 +1129,10 @@ def process_checkout():
         return jsonify({"success": False, "message": "Cart is empty"}), 400
 
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        return jsonify({"success": False, "message": "Database connection error"}), 500
+    
+    cur = conn.cursor(dictionary=True)
 
     try:
         subtotal = 0
@@ -1052,14 +1149,14 @@ def process_checkout():
 
         cur.execute("""
             INSERT INTO bills_new (bill_number, total, discount, payment_mode, bill_date, created_by)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
         """, (bill_no, total, discount, payment_mode, datetime.now(), session["user_id"]))
 
         bill_id = cur.lastrowid
 
         for item in cart:
             # Check stock availability
-            cur.execute("SELECT stock FROM products WHERE id=?", (item["id"],))
+            cur.execute("SELECT stock FROM products WHERE id=%s", (item["id"],))
             product = cur.fetchone()
             
             if not product or product['stock'] < item["qty"]:
@@ -1068,15 +1165,15 @@ def process_checkout():
             item_total = (item["price"] * item["qty"]) + ((item["price"] * item["qty"]) * item["gst"] / 100)
             cur.execute("""
                 INSERT INTO bill_items (bill_id, product_name, quantity, price, gst, item_total)
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s, %s)
             """, (bill_id, item["name"], item["qty"], item["price"], item["gst"], item_total))
 
-            cur.execute("UPDATE products SET stock = stock - ? WHERE id=?", (item["qty"], item["id"]))
+            cur.execute("UPDATE products SET stock = stock - %s WHERE id=%s", (item["qty"], item["id"]))
 
             # Log stock movement for sale (negative quantity)
             cur.execute("""
                 INSERT INTO stock_movements (product_id, change_qty, movement_type, reference_id, created_by)
-                VALUES (?, ?, 'SALE', ?, ?)
+                VALUES (%s, %s, 'SALE', %s, %s)
             """, (item["id"], -item["qty"], bill_id, session["user_id"]))
 
         conn.commit()
@@ -1093,8 +1190,12 @@ def process_checkout():
 @login_required
 def view_bill(bill_id):
     conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM bills_new WHERE id=?", (bill_id,))
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("reports"))
+    
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM bills_new WHERE id=%s", (bill_id,))
     bill = cur.fetchone()
     
     if not bill:
@@ -1102,10 +1203,74 @@ def view_bill(bill_id):
         conn.close()
         return redirect(url_for("reports"))
     
-    cur.execute("SELECT * FROM bill_items WHERE bill_id=?", (bill_id,))
+    cur.execute("SELECT * FROM bill_items WHERE bill_id=%s", (bill_id,))
     items = cur.fetchall()
     conn.close()
     return render_template("view_bill.html", bill=bill, items=items)
+
+@app.route("/print_bill_a4/<int:bill_id>")
+@login_required
+def print_bill_a4(bill_id):
+    conn = get_db_connection()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("reports"))
+    
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM bills_new WHERE id=%s", (bill_id,))
+    bill = cur.fetchone()
+    
+    if not bill:
+        flash("Bill not found", "danger")
+        conn.close()
+        return redirect(url_for("reports"))
+    
+    cur.execute("SELECT * FROM bill_items WHERE bill_id=%s", (bill_id,))
+    items = cur.fetchall()
+    
+    # Calculate subtotal and GST
+    subtotal = 0
+    total_gst = 0
+    for item in items:
+        item_price = float(item['price']) * item['quantity']
+        item_gst = item_price * (float(item['gst']) / 100)
+        subtotal += item_price
+        total_gst += item_gst
+    
+    conn.close()
+    return render_template("print_bill_a4.html", bill=bill, items=items, subtotal=subtotal, total_gst=total_gst)
+
+@app.route("/print_bill_thermal/<int:bill_id>")
+@login_required
+def print_bill_thermal(bill_id):
+    conn = get_db_connection()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("reports"))
+    
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM bills_new WHERE id=%s", (bill_id,))
+    bill = cur.fetchone()
+    
+    if not bill:
+        flash("Bill not found", "danger")
+        conn.close()
+        return redirect(url_for("reports"))
+    
+    cur.execute("SELECT * FROM bill_items WHERE bill_id=%s", (bill_id,))
+    items = cur.fetchall()
+    
+    # Calculate subtotal and GST
+    subtotal = 0
+    total_gst = 0
+    for item in items:
+        item_price = float(item['price']) * item['quantity']
+        item_gst = item_price * (float(item['gst']) / 100)
+        subtotal += item_price
+        total_gst += item_gst
+    
+    conn.close()
+    return render_template("print_bill_thermal.html", bill=bill, items=items, subtotal=subtotal, total_gst=total_gst)
 
 # -----------------------
 # REPORTS
@@ -1121,15 +1286,19 @@ def reports():
         report_type = 'all'
     
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("dashboard"))
+    
+    cur = conn.cursor(dictionary=True)
     
     # Build query based on report type
     if report_type == 'daily':
-        date_filter = "DATE(bill_date) = DATE('now')"
+        date_filter = "DATE(bill_date) = CURDATE()"
     elif report_type == 'weekly':
-        date_filter = "DATE(bill_date) >= DATE('now', '-7 days')"
+        date_filter = "DATE(bill_date) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)"
     elif report_type == 'monthly':
-        date_filter = "strftime('%Y-%m', bill_date) = strftime('%Y-%m', 'now')"
+        date_filter = "DATE_FORMAT(bill_date, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')"
     else:  # all
         date_filter = "1=1"
     
@@ -1151,15 +1320,15 @@ def reports():
     """
     cur.execute(stats_query)
     stats_row = cur.fetchone()
-    stats = (stats_row[0], stats_row[1], stats_row[2])
+    stats = (stats_row['COUNT(*)'], float(stats_row['COALESCE(SUM(total), 0)']), float(stats_row['COALESCE(SUM(discount), 0)']))
     
     # Get purchase statistics
     if report_type == 'daily':
-        purchase_date_filter = "DATE(p.created_at) = DATE('now')"
+        purchase_date_filter = "DATE(p.created_at) = CURDATE()"
     elif report_type == 'weekly':
-        purchase_date_filter = "DATE(p.created_at) >= DATE('now', '-7 days')"
+        purchase_date_filter = "DATE(p.created_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)"
     elif report_type == 'monthly':
-        purchase_date_filter = "strftime('%Y-%m', p.created_at) = strftime('%Y-%m', 'now')"
+        purchase_date_filter = "DATE_FORMAT(p.created_at, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')"
     else:  # all
         purchase_date_filter = "1=1"
     
@@ -1170,7 +1339,7 @@ def reports():
     """
     cur.execute(purchase_query)
     purchase_row = cur.fetchone()
-    total_purchases = purchase_row[0] if purchase_row else 0
+    total_purchases = float(purchase_row['total_purchases']) if purchase_row else 0
     
     conn.close()
     return render_template("reports.html", bills=bills, stats=stats, total_purchases=total_purchases, report_type=report_type)
@@ -1183,7 +1352,11 @@ def reports():
 @admin_required
 def product_analytics():
     conn = get_db_connection()
-    cur = conn.cursor()
+    if not conn:
+        flash("Database connection error", "danger")
+        return redirect(url_for("dashboard"))
+    
+    cur = conn.cursor(dictionary=True)
 
     # Top selling products (based on quantity sold)
     cur.execute("""
