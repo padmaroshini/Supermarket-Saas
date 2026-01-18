@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Receipt - {{ bill.bill_number }}</title>
+    <style>
+        @media print {
+            body {
+                margin: 0;
+                padding: 0;
+            }
+            .no-print {
+                display: none;
+            }
+            @page {
+                size: 80mm auto;
+                margin: 0;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            width: 80mm;
+            margin: 0 auto;
+            padding: 10px;
+            background: white;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+
+        .print-button {
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .print-button button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 0 5px;
+            font-family: Arial, sans-serif;
+        }
+
+        .print-button button:hover {
+            background: #059669;
+        }
+
+        .print-button button.close-btn {
+            background: #6b7280;
+        }
+
+        .print-button button.close-btn:hover {
+            background: #4b5563;
+        }
+
+        .header {
+            text-align: center;
+            border-bottom: 2px dashed #000;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+        }
+
+        .header h2 {
+            margin: 0 0 5px 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .header p {
+            margin: 2px 0;
+            font-size: 11px;
+        }
+
+        .bill-info {
+            margin-bottom: 10px;
+            font-size: 11px;
+        }
+
+        .bill-info p {
+            margin: 3px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .bill-info strong {
+            font-weight: bold;
+        }
+
+        .separator {
+            border-top: 1px dashed #000;
+            margin: 10px 0;
+        }
+
+        .separator-solid {
+            border-top: 1px solid #000;
+            margin: 10px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .items-header {
+            border-bottom: 1px solid #000;
+            padding: 5px 0;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .item-row {
+            padding: 5px 0;
+            border-bottom: 1px dotted #ccc;
+        }
+
+        .item-name {
+            font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .item-details {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: #333;
+        }
+
+        .item-total {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 3px;
+            font-weight: bold;
+        }
+
+        .totals {
+            margin-top: 10px;
+            font-size: 11px;
+        }
+
+        .totals-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 3px 0;
+        }
+
+        .grand-total {
+            font-weight: bold;
+            font-size: 14px;
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            padding: 8px 0;
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .footer {
+            margin-top: 15px;
+            text-align: center;
+            border-top: 2px dashed #000;
+            padding-top: 10px;
+            font-size: 11px;
+        }
+
+        .footer p {
+            margin: 3px 0;
+        }
+
+        .footer .thank-you {
+            font-weight: bold;
+            font-size: 13px;
+            margin: 8px 0;
+        }
+
+        .footer .stars {
+            margin: 10px 0;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="print-button no-print">
+        <button onclick="window.print()">🖨️ Print Receipt</button>
+        <button onclick="window.close()" class="close-btn">✖ Close</button>
+    </div>
+
+    <div class="header">
+        <h2>SUPERMARKET SAAS</h2>
+        <p>123 Market Street</p>
+        <p>City, State - 123456</p>
+        <p>Ph: +91 1234567890</p>
+        <p>GSTIN: 29XXXXX1234X1ZX</p>
+    </div>
+
+    <div class="bill-info">
+        <p><strong>Bill No:</strong> <span>{{ bill["bill_number"] }}</span></p>
+        <p><strong>Date:</strong> <span>{{ bill["bill_date"] }}</span></p>
+        <p><strong>Payment:</strong> <span>{{ bill["payment_mode"] }}</span></p>
+    </div>
+
+    <div class="separator-solid"></div>
+
+    <div class="items-header">
+        <span>Item</span>
+        <span>Amount</span>
+    </div>
+
+    {% for item in items %}
+    <div class="item-row">
+        <div class="item-name">{{ item["product_name"] }}</div>
+        <div class="item-details">
+            <span>{{ item["quantity"] }} x ₹{{ "%.2f"|format(item["price"]) }}</span>
+            <span>GST {{ item["gst"] }}%</span>
+        </div>
+        <div class="item-total">
+            <span></span>
+            <span>₹{{ "%.2f"|format(item["item_total"]) }}</span>
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="separator-solid"></div>
+
+    <div class="totals">
+        <div class="totals-row">
+            <span>Subtotal:</span>
+            <span>₹{{ "%.2f"|format(subtotal) }}</span>
+        </div>
+        <div class="totals-row">
+            <span>Total GST:</span>
+            <span>₹{{ "%.2f"|format(total_gst) }}</span>
+        </div>
+        {% if bill["discount"] > 0 %}
+        <div class="totals-row">
+            <span>Discount:</span>
+            <span>- ₹{{ "%.2f"|format(bill["discount"]) }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="grand-total">
+        <span>TOTAL:</span>
+        <span>₹{{ "%.2f"|format(bill["total"]) }}</span>
+    </div>
+
+    <div class="footer">
+        <p class="thank-you">THANK YOU!</p>
+        <p>Visit Again</p>
+        <p>{{ bill["bill_date"] }}</p>
+        <p class="stars">* * *</p>
+        <p style="font-size: 9px;">Goods once sold cannot be returned</p>
+    </div>
+</body>
+</html>
